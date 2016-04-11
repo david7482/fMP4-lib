@@ -207,7 +207,7 @@ Glib::RefPtr<Glib::MainLoop> mainloop;
 std::shared_ptr<MP4Reader> mp4_reader;
 std::shared_ptr<WebSocketClient> websocket_client;
 std::chrono::steady_clock::time_point wait_timepoint = std::chrono::steady_clock::now();
-unsigned char sample_buffer[32 * 1024];
+unsigned char sample_buffer[1024 * 1024];
 
 static bool ReadSample()
 {
@@ -258,7 +258,7 @@ static bool ReadSample()
             sample_buffer_offset += sample_size;
         }
 
-        websocket_client->SendData(sample, sample_buffer_offset);
+        websocket_client->SendData(sample_buffer, sample_buffer_offset);
     }
 
     // Update the waiting time point
