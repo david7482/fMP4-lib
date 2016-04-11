@@ -1,0 +1,13 @@
+CMakeLists.txt.user
+build
+build_mips
+dbus_*_generated.*
+.idea
+cscope*
+*.swp
+*.autosave
+*.orig
+*.un~
+GPATH
+GRTAGS
+GTAGS
