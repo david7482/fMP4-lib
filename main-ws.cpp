@@ -272,8 +272,9 @@ static void OnWebsocketConnected(const std::string &file_path)
     printf("Websocket connected\n");
 
     mp4_reader = std::make_shared<MP4Reader>(file_path);
-
     Glib::signal_idle().connect(sigc::ptr_fun(&ReadSample));
+
+    wait_timepoint = std::chrono::steady_clock::now();
 }
 
 static void OnWebsocketClosed()
