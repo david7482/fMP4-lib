@@ -65,4 +65,13 @@ RUN cd /tmp; \
     make -j4; \
     make install
 
+RUN apt-get -y install gtk-doc-tools libsqlite3-dev libglibmm-2.4-dev glib-networking libsigc++-2.0-dev
+RUN cd /tmp; \
+    git clone https://github.com/david7482/libsoup.git; \
+    cd libsoup; \
+    git checkout 6fc5bd261457fd58faa4ca16fbe964566ef152e5 -b build; \
+    ./autogen.sh --without-gnome --disable-static --disable-debug --disable-introspection --disable-vala; \
+    make -j4; \
+    make install
+
 RUN rm -rf /tmp/*

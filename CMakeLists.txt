@@ -43,6 +43,30 @@ if(GSTCODECPARSERLIB_FOUND)
     link_directories(${GSTCODECPARSERLIB_LIBRARY_DIRS})
 endif()
 
+pkg_check_modules(LIBSOUP REQUIRED libsoup-2.4)
+if(LIBSOUP_FOUND)
+    include_directories(${LIBSOUP_INCLUDE_DIRS})
+    link_directories(${LIBSOUP_LIBRARY_DIRS})
+endif()
+
+pkg_check_modules(LIBSIGC REQUIRED sigc++-2.0)
+if(LIBSIGC_FOUND)
+    include_directories(${LIBSIGC_INCLUDE_DIRS})
+    link_directories(${LIBSIGC_LIBRARY_DIRS})
+endif()
+
+pkg_check_modules(LIBGLIBMM REQUIRED glibmm-2.4)
+if(LIBGLIBMM_FOUND)
+    include_directories(${LIBGLIBMM_INCLUDE_DIRS})
+    link_directories(${LIBGLIBMM_LIBRARY_DIRS})
+endif()
+
+pkg_check_modules(LIBGIOMM REQUIRED giomm-2.4)
+if(LIBGIOMM_FOUND)
+    include_directories(${LIBGIOMM_INCLUDE_DIRS})
+    link_directories(${LIBGIOMM_LIBRARY_DIRS})
+endif()
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -D__STDC_CONSTANT_MACROS")
 
 add_library(fMP4 STATIC fMP4.h fMP4.hpp fMP4-imp.hpp fMP4-imp.cpp fMP4.cpp)
@@ -54,12 +78,21 @@ target_link_libraries(fMP4
         ${CMAKE_THREAD_LIBS_INIT}
         ${GSTCODECPARSERLIB_LIBRARIES}
 )
+install(TARGETS fMP4 DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
+install(FILES fMP4.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/libfMP4)
 
-add_executable(main main.cpp)
-target_link_libraries(main
+add_executable(main-test main-test.cpp)
+target_link_libraries(main-test
         fMP4
         ${MP4V2_LIBRARY}
 )
 
-install(TARGETS fMP4 DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
-install(FILES fMP4.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/libfMP4)
+add_executable(main-ws ws-client.hpp ws-client.cpp main-ws.cpp)
+target_link_libraries(main-ws
+        fMP4
+        ${MP4V2_LIBRARY}
+        ${LIBSOUP_LIBRARIES}
+        ${LIBGIOMM_LIBRARIES}
+        ${LIBGLIBMM_LIBRARIES}
+        ${LIBSIGC_LIBRARIES}
+)
