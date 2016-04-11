@@ -45,8 +45,8 @@ endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -D__STDC_CONSTANT_MACROS")
 
-add_library(fMP4-lib fMP4-lib.h fMP4-lib.hpp fMP4-lib-imp.hpp fMP4-lib-imp.cpp fMP4-lib.cpp)
-target_link_libraries(fMP4-lib
+add_library(fMP4 STATIC fMP4.h fMP4.hpp fMP4-imp.hpp fMP4-imp.cpp fMP4.cpp)
+target_link_libraries(fMP4
         ${LIBAVCODEC_LIBRARIES}
         ${LIBAVUTIL_LIBRARIES}
         ${LIBAVFORMAT_LIBRARIES}
@@ -57,6 +57,9 @@ target_link_libraries(fMP4-lib
 
 add_executable(main main.cpp)
 target_link_libraries(main
-        fMP4-lib
+        fMP4
         ${MP4V2_LIBRARY}
 )
+
+install(TARGETS fMP4 DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
+install(FILES fMP4.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/libfMP4)

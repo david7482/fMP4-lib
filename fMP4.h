@@ -8,11 +8,11 @@ extern "C" {
 typedef void* fMP4Writer;
 typedef int (*DataCallback)(unsigned char*, int);
 
-fMP4Writer CreatefMP4Writer(DataCallback cb);
+fMP4Writer fMP4_CreateWriter(DataCallback cb);
 
-void ReleasefMP4Writer(fMP4Writer);
+void fMP4_ReleaseWriter(fMP4Writer);
 
-bool WriteH264VideoSample(fMP4Writer,
+bool fMP4_WriteH264Sample(fMP4Writer,
                           unsigned char *sample,
                           unsigned int sample_size,
                           bool is_key_frame,

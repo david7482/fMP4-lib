@@ -6,7 +6,7 @@
 #include <mp4v2/mp4v2.h>
 #include <netinet/in.h>
 
-#include "fMP4-lib.h"
+#include "fMP4.h"
 
 FILE *fptr = nullptr;
 
@@ -199,17 +199,19 @@ int main(int argc, char **argv)
 
     std::shared_ptr<MP4Reader> input = std::make_shared<MP4Reader>(argv[1]);
 
-    fMP4Writer fmp4_writer = CreatefMP4Writer(&Write);
-
     fptr = fopen(argv[2], "wb");
+
+    fMP4Writer fmp4_writer = fMP4_CreateWriter(&Write);
 
     unsigned char *sample = nullptr;
     unsigned int sample_size = 0;
     unsigned long long int duration = 0;
     bool is_key_frame = false;
     while (input->GetNextH264VideoSample(&sample, sample_size, duration, is_key_frame) == MP4Reader::MP4_READ_OK) {
-        WriteH264VideoSample(fmp4_writer, sample, sample_size, is_key_frame, duration);
+        fMP4_WriteH264Sample(fmp4_writer, sample, sample_size, is_key_frame, duration);
     }
+
+    fMP4_ReleaseWriter(fmp4_writer);
 
     fclose(fptr);
 
