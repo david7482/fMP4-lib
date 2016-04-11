@@ -52,6 +52,11 @@ target_link_libraries(fMP4-lib
         ${LIBAVFORMAT_LIBRARIES}
         ${LIBSWSCALE_LIBRARIES}
         ${CMAKE_THREAD_LIBS_INIT}
-        ${MP4V2_LIBRARY}
         ${GSTCODECPARSERLIB_LIBRARIES}
+)
+
+add_executable(main main.cpp)
+target_link_libraries(main
+        fMP4-lib
+        ${MP4V2_LIBRARY}
 )
