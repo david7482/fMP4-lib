@@ -118,6 +118,11 @@ func process(writer *websocket.Conn, reader *websocket.Conn) error {
 		size := len(buf)
 		fmt.Printf("frame: %v, %d, %d\n", is_key_frame, duration, size)
 
+		if duration == 0 {
+			fmt.Println("Frame with 0 duration is found. Drop it")
+			continue
+		}
+
 		// Do some prcocess
 		err = mp4writer.WriteH264Sample(buf, uint(size), is_key_frame, uint64(duration))
 		if err != nil {
