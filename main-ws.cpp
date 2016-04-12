@@ -8,14 +8,16 @@
 #include <netinet/in.h>
 
 #include "ws-client.hpp"
+#include "fMP4.h"
 
 class OptionGroup : public Glib::OptionGroup
 {
 public:
 
-    OptionGroup() : Glib::OptionGroup("", "")
+    OptionGroup() : Glib::OptionGroup("", ""), repeat(false)
     {
         AddEntry('s', "server", "Set server address. Ex: echo.websocket.org:80", server);
+        AddEntry('r', "repeat", "Enable repeat mode", repeat);
         AddEntryFileName('m', "mp4", "Set MP4 file path", mp4_file_path);
     }
 
@@ -25,7 +27,18 @@ public:
 
     const std::string &GetMp4FilePath() const { return mp4_file_path; }
 
+    const bool GetRepeatMode() const { return repeat; }
+
     void AddEntry(const char &short_name, const std::string &long_name, const std::string &description, Glib::ustring &arg)
+    {
+        Glib::OptionEntry entry;
+        entry.set_short_name(short_name);
+        entry.set_long_name(long_name);
+        entry.set_description(description);
+        add_entry(entry, arg);
+    }
+
+    void AddEntry(const char &short_name, const std::string &long_name, const std::string &description, bool &arg)
     {
         Glib::OptionEntry entry;
         entry.set_short_name(short_name);
@@ -47,7 +60,7 @@ private:
 
     Glib::ustring server;
     std::string mp4_file_path;
-    int fps;
+    bool repeat;
 };
 
 class MP4Reader
@@ -208,6 +221,27 @@ std::shared_ptr<MP4Reader> mp4_reader;
 std::shared_ptr<WebSocketClient> websocket_client;
 std::chrono::steady_clock::time_point wait_timepoint = std::chrono::steady_clock::now();
 unsigned char sample_buffer[1024 * 1024];
+OptionGroup option_group;
+
+fMP4Writer fmp4_writer = nullptr;
+FILE *fptr = nullptr;
+
+static bool OnExit(gpointer data)
+{
+    if (fmp4_writer) {
+        fMP4_ReleaseWriter(fmp4_writer);
+        fmp4_writer = nullptr;
+    }
+
+    if (fptr) {
+        fclose(fptr);
+        fptr = nullptr;
+    }
+
+    mainloop->quit();
+
+    return G_SOURCE_REMOVE;
+}
 
 static bool ReadSample()
 {
@@ -224,12 +258,16 @@ static bool ReadSample()
         // Already get the end of current MP4 file, we will loop from the beginning.
         std::string file_path = mp4_reader->GetFilePath();
         mp4_reader.reset();
-        mp4_reader = std::make_shared<MP4Reader>(file_path);
 
-        status = mp4_reader->GetNextH264VideoSample(&sample, sample_size, duration, is_key_frame);
-        if (status != MP4Reader::MP4_READ_OK) {
-            printf("Fail to loop back to the first sample\n");
-            return true;
+        if (option_group.GetRepeatMode()) {
+            mp4_reader = std::make_shared<MP4Reader>(file_path);
+            status = mp4_reader->GetNextH264VideoSample(&sample, sample_size, duration, is_key_frame);
+            if (status != MP4Reader::MP4_READ_OK) {
+                printf("Fail to loop back to the first sample\n");
+                return true;
+            }
+        } else {
+            return false;
         }
     }
     if (sample_size == 0) {
@@ -267,6 +305,13 @@ static bool ReadSample()
     return true;
 }
 
+static int Write(unsigned char* buf, int buf_size)
+{
+    static int i = 0;
+    printf("#%d Write: buf: %p(%02x%02x%02x%02x %c%c%c%c), size: %d\n", i++, buf, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf_size);
+    return fwrite(buf, 1, buf_size, fptr);
+}
+
 static void OnWebsocketConnected(const std::string &file_path)
 {
     printf("Websocket connected\n");
@@ -290,13 +335,25 @@ static void OnWebsocketMessage(const std::string& msg)
 
 static void OnWebsocketData(const unsigned char *data, unsigned int data_size)
 {
-    printf("WebsocketData: size(%d)\n", data_size);
+    // If we test with echo server (echo.websocket.org),
+    // we will get data back so that we could mux and dump those data into mp4.
+    {
+        if (!fptr)
+            fptr = fopen("dump.mp4", "wb");
+        if (!fmp4_writer)
+            fmp4_writer = fMP4_CreateWriter(&Write);
+
+        bool tmp_is_key_frame = (data[0] == 0x01);
+        unsigned int tmp_duration = *(unsigned int *)(&data[1]);
+        unsigned int tmp_size = *(unsigned int *)(&data[5]);
+        unsigned char *tmp_sample = const_cast<unsigned char *>(&data[9]);
+        fMP4_WriteH264Sample(fmp4_writer, tmp_sample, tmp_size, tmp_is_key_frame, tmp_duration);
+    }
 }
 
 int main (int argc, char **argv)
 {
     // Setup program command line context
-    OptionGroup option_group;
     Glib::OptionContext option_context("- Websocket Client");
     option_context.set_main_group(option_group);
     try {
@@ -321,6 +378,9 @@ int main (int argc, char **argv)
     }
 
     printf("Start websocket client to %s\n", option_group.GetServer().c_str());
+
+    g_unix_signal_add(SIGINT, (GSourceFunc)OnExit, NULL);
+    g_unix_signal_add(SIGTERM, (GSourceFunc)OnExit, NULL);
     mainloop = Glib::MainLoop::create();
     mainloop->run();
 

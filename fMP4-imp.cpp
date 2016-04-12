@@ -28,7 +28,7 @@ MP4WriterImp::MP4WriterImp(DataCallback cb)
 
 MP4WriterImp::~MP4WriterImp()
 {
-    if (av_write_trailer(format_context) < 0) {
+    if (format_context && av_write_trailer(format_context) < 0) {
         printf("Fail to write trailer\n");
     }
 
@@ -79,16 +79,21 @@ bool MP4WriterImp::WriteH264VideoSample(unsigned char *sample,
     std::vector<GstH264NalUnit> nalus = ParseH264NALU(sample, sample_size);
 
     // To compatible with AVC1 format, we need to add SPS/PPS into mp4 header. (In avcC box)
-    if (!format_context && is_key_frame) {
-        GstH264NalUnit nal_sps = {0}, nal_pps = {0};
-        for (auto nalu : nalus) {
-            if (nalu.type == GST_H264_NAL_SPS) nal_sps = nalu;
-            else if (nalu.type == GST_H264_NAL_PPS) nal_pps = nalu;
-        }
+    if (!format_context) {
+        if (is_key_frame) {
+            GstH264NalUnit nal_sps = {0}, nal_pps = {0};
+            for (auto nalu : nalus) {
+                if (nalu.type == GST_H264_NAL_SPS) nal_sps = nalu;
+                else if (nalu.type == GST_H264_NAL_PPS) nal_pps = nalu;
+            }
 
-        if (!AddH264VideoTrack(nal_sps, nal_pps)) {
-            printf("Fail to add H264 video track\n");
-            return false;
+            if (!AddH264VideoTrack(nal_sps, nal_pps)) {
+                printf("Fail to add H264 video track\n");
+                return false;
+            }
+        } else {
+            printf("Drop current frame because it is not a key frame. Need key frame for initialization\n");
+            return true;
         }
     }
 
