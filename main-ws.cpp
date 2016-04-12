@@ -8,14 +8,16 @@
 #include <netinet/in.h>
 
 #include "ws-client.hpp"
+#include "fMP4.h"
 
 class OptionGroup : public Glib::OptionGroup
 {
 public:
 
-    OptionGroup() : Glib::OptionGroup("", "")
+    OptionGroup() : Glib::OptionGroup("", ""), repeat(false)
     {
         AddEntry('s', "server", "Set server address. Ex: echo.websocket.org:80", server);
+        AddEntry('r', "repeat", "Enable repeat mode", repeat);
         AddEntryFileName('m', "mp4", "Set MP4 file path", mp4_file_path);
     }
 
@@ -25,7 +27,18 @@ public:
 
     const std::string &GetMp4FilePath() const { return mp4_file_path; }
 
+    const bool GetRepeatMode() const { return repeat; }
+
     void AddEntry(const char &short_name, const std::string &long_name, const std::string &description, Glib::ustring &arg)
+    {
+        Glib::OptionEntry entry;
+        entry.set_short_name(short_name);
+        entry.set_long_name(long_name);
+        entry.set_description(description);
+        add_entry(entry, arg);
+    }
+
+    void AddEntry(const char &short_name, const std::string &long_name, const std::string &description, bool &arg)
     {
         Glib::OptionEntry entry;
         entry.set_short_name(short_name);
@@ -47,7 +60,7 @@ private:
 
     Glib::ustring server;
     std::string mp4_file_path;
-    int fps;
+    bool repeat;
 };
 
 class MP4Reader
@@ -224,12 +237,16 @@ static bool ReadSample()
         // Already get the end of current MP4 file, we will loop from the beginning.
         std::string file_path = mp4_reader->GetFilePath();
         mp4_reader.reset();
-        mp4_reader = std::make_shared<MP4Reader>(file_path);
 
-        status = mp4_reader->GetNextH264VideoSample(&sample, sample_size, duration, is_key_frame);
-        if (status != MP4Reader::MP4_READ_OK) {
-            printf("Fail to loop back to the first sample\n");
-            return true;
+        if (option_group.GetRepeatMode()) {
+            mp4_reader = std::make_shared<MP4Reader>(file_path);
+            status = mp4_reader->GetNextH264VideoSample(&sample, sample_size, duration, is_key_frame);
+            if (status != MP4Reader::MP4_READ_OK) {
+                printf("Fail to loop back to the first sample\n");
+                return true;
+            }
+        } else {
+            return false;
         }
     }
     if (sample_size == 0) {
