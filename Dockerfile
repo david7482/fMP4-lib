@@ -73,5 +73,6 @@ RUN cd /tmp; \
     ./autogen.sh --without-gnome --disable-static --disable-debug --disable-introspection --disable-vala; \
     make -j4; \
     make install
+RUN apt-get -y install golang
 
 RUN rm -rf /tmp/*
