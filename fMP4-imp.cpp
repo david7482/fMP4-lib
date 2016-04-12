@@ -28,7 +28,7 @@ MP4WriterImp::MP4WriterImp(DataCallback cb)
 
 MP4WriterImp::~MP4WriterImp()
 {
-    if (av_write_trailer(format_context) < 0) {
+    if (format_context && av_write_trailer(format_context) < 0) {
         printf("Fail to write trailer\n");
     }
 
