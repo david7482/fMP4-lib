@@ -28,21 +28,19 @@ func GoMP4Callback(buf *C.uchar, size C.int) C.int {
 
 func write_frame(writer *websocket.Conn) {
 	for {
-		select {
-		case s := <-frame_ch:
-			fmt.Printf("Write buf: %d\n", len(s))
+		s := <-frame_ch
+		fmt.Printf("Write buf: %d\n", len(s))
 
-			if len(s) == 0 {
-				return
-			}
+		if len(s) == 0 {
+			return
+		}
 
-			// Note: We must use websocket.Message to send binary frames
-			// The websocket.Conn.Write can't achieve that
-			msg := websocket.Message
-			err := msg.Send(writer, s)
-			if err != nil {
-				fmt.Println(err)
-			}
+		// Note: We must use websocket.Message to send binary frames
+		// The websocket.Conn.Write can't achieve that
+		msg := websocket.Message
+		err := msg.Send(writer, s)
+		if err != nil {
+			fmt.Println(err)
 		}
 	}
 }
