@@ -58,8 +58,8 @@ MP4WriterImp::~MP4WriterImp()
 // Performs a write operation using the signature required for avio.
 int MP4WriterImp::Write(void* opaque, uint8_t* buf, int buf_size)
 {
-    static int i = 0;
-    printf("#%d Write: buf: %p(%02x%02x%02x%02x %c%c%c%c), size: %d\n", i++, buf, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf_size);
+    //static int i = 0;
+    //printf("#%d Write: buf: %p(%02x%02x%02x%02x %c%c%c%c), size: %d\n", i++, buf, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf_size);
 
     // Don't need to write mfra box
     if (buf[4] == 'm' && buf[5] == 'f' && buf[6] == 'r' && buf[7] == 'a') {
@@ -238,7 +238,17 @@ bool MP4WriterImp::AddH264VideoTrack(GstH264NalUnit &nal_sps, GstH264NalUnit &na
      */
     {
         AVDictionary *movflags = nullptr;
-        av_dict_set(&movflags, "movflags", "empty_moov+default_base_moof+frag_keyframe", 0);
+
+        const bool low_delay = true;
+        if (low_delay) {
+            // In case of low delay, set fragment duration to 200 ms.
+            av_dict_set(&movflags, "movflags", "empty_moov+default_base_moof", 0);
+            av_dict_set_int(&movflags, "frag_duration", 200 * 1000, 0);
+        } else {
+            // Only produce fragment until we have next key frame.
+            av_dict_set(&movflags, "movflags", "empty_moov+default_base_moof+frag_keyframe", 0);
+        }
+
         if (avformat_write_header(format_context, &movflags) < 0) {
             printf("Error occurred when opening output file\n");
             return false;
