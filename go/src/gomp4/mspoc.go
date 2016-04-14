@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"golang.org/x/net/websocket"
-	"io"
 	"net/http"
 	"unsafe"
 )
@@ -59,19 +58,21 @@ func conv2int(buf []byte) int {
 	return tmp
 }
 
-func read_buffer(reader io.ReadCloser) (bool, int, []byte, error) {
-	hdr := make([]byte, 9)
+func read_buffer(reader *websocket.Conn) (bool, int, []byte, error) {
+	var msg []byte
 
-	n, err := reader.Read(hdr)
+	err := websocket.Message.Receive(reader, &msg)
 	if err != nil {
 		fmt.Println(err)
 		return false, 0, nil, err
 	}
 
-	if n != 9 {
-		fmt.Println("The hdr size unmatched")
-		return false, 0, nil, errors.New("Invalid hdr size")
+	if len(msg) <= 9 {
+		fmt.Printf("The msg is too small: %d\n", len(msg))
+		return false, 0, nil, errors.New("Msg is too small")
 	}
+
+	hdr := msg[:9]
 
 	is_key_frame := false
 	if hdr[0] == 1 {
@@ -80,24 +81,13 @@ func read_buffer(reader io.ReadCloser) (bool, int, []byte, error) {
 
 	duration := conv2int(hdr[1:5])
 	size := conv2int(hdr[5:9])
-	buf := make([]byte, 0)
 
-	total := size
-	for total > 0 {
-		tmp := make([]byte, total)
-
-		n, err = reader.Read(tmp)
-		if err != nil {
-			fmt.Println(err)
-			return false, 0, nil, err
-		}
-
-		buf = append(buf, tmp[:n]...)
-
-		total -= n
+	if size != len(msg)-9 {
+		fmt.Printf("Size unmatch hdr: %d, msg: %d\n", size, len(msg)-9)
+		return false, 0, nil, errors.New("Msg size unmatched")
 	}
 
-	return is_key_frame, duration, buf[:size], nil
+	return is_key_frame, duration, msg[9:], nil
 }
 
 func process(writer *websocket.Conn, reader *websocket.Conn) error {
@@ -117,6 +107,11 @@ func process(writer *websocket.Conn, reader *websocket.Conn) error {
 
 		size := len(buf)
 		fmt.Printf("frame: %v, %d, %d\n", is_key_frame, duration, size)
+
+		if duration == 0 {
+			fmt.Println("Frame with 0 duration is found. Drop it")
+			continue
+		}
 
 		// Do some prcocess
 		err = mp4writer.WriteH264Sample(buf, uint(size), is_key_frame, uint64(duration))
