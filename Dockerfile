@@ -73,6 +73,9 @@ RUN cd /tmp; \
     ./autogen.sh --without-gnome --disable-static --disable-debug --disable-introspection --disable-vala; \
     make -j4; \
     make install
-RUN apt-get -y install golang
+RUN cd /tmp; \
+    wget -nd -nH 'https://storage.googleapis.com/golang/go1.6.1.linux-amd64.tar.gz'; \
+    tar zxf go1.6.1.linux-amd64.tar.gz -C /usr/local; \
+    echo 'export PATH=$PATH:/usr/local/go/bin' >> /root/.bashrc
 
 RUN rm -rf /tmp/*
