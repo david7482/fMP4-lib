@@ -4,10 +4,13 @@ package main
 import "C"
 
 import (
+	"crypto/tls"
 	"errors"
+	"flag"
 	"fmt"
 	"golang.org/x/net/websocket"
 	"net/http"
+	"os"
 	"unsafe"
 )
 
@@ -28,21 +31,19 @@ func GoMP4Callback(buf *C.uchar, size C.int) C.int {
 
 func write_frame(writer *websocket.Conn) {
 	for {
-		select {
-		case s := <-frame_ch:
-			fmt.Printf("Write buf: %d\n", len(s))
+		s := <-frame_ch
+		fmt.Printf("Write buf: %d\n", len(s))
 
-			if len(s) == 0 {
-				return
-			}
+		if len(s) == 0 {
+			return
+		}
 
-			// Note: We must use websocket.Message to send binary frames
-			// The websocket.Conn.Write can't achieve that
-			msg := websocket.Message
-			err := msg.Send(writer, s)
-			if err != nil {
-				fmt.Println(err)
-			}
+		// Note: We must use websocket.Message to send binary frames
+		// The websocket.Conn.Write can't achieve that
+		msg := websocket.Message
+		err := msg.Send(writer, s)
+		if err != nil {
+			fmt.Println(err)
 		}
 	}
 }
@@ -98,6 +99,7 @@ func process(writer *websocket.Conn, reader *websocket.Conn) error {
 
 	go write_frame(writer)
 
+	var last_duration int
 	for {
 		is_key_frame, duration, buf, err := read_buffer(reader)
 		if err != nil {
@@ -110,7 +112,9 @@ func process(writer *websocket.Conn, reader *websocket.Conn) error {
 
 		if duration == 0 {
 			fmt.Println("Frame with 0 duration is found. Drop it")
-			continue
+			duration = last_duration
+		} else {
+			last_duration = duration
 		}
 
 		// Do some prcocess
@@ -157,10 +161,61 @@ func clientHandler(ws *websocket.Conn) {
 	fmt.Println("client quit")
 }
 
+func runHttps(port int, cert_path, key_path string) error {
+	cert, err := tls.LoadX509KeyPair(cert_path, key_path)
+	if err != nil {
+		fmt.Println(err)
+		return errors.New(err.Error())
+	}
+
+	var config tls.Config
+	config.Certificates = append(config.Certificates, cert)
+
+	ln, err := tls.Listen("tcp", fmt.Sprintf(":%d", port), &config)
+	if err != nil {
+		fmt.Println(err)
+		return errors.New(err.Error())
+	}
+
+	http.Serve(ln, nil)
+
+	return nil
+}
+
+func runHttp(port int) error {
+	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+
+	return nil
+}
+
 func main() {
+	var is_ssl bool
+	var cert_path, key_path string
+	var port int
+
+	flag.BoolVar(&is_ssl, "ssl", false, "Enable SSL")
+	flag.StringVar(&cert_path, "cert", "", "Certificate path")
+	flag.StringVar(&key_path, "key", "", "Key path")
+	flag.IntVar(&port, "port", 8080, "Port")
+	flag.Parse()
+
+	if is_ssl {
+		if cert_path == "" || key_path == "" {
+			fmt.Println("Please specify certificate or key path")
+			os.Exit(1)
+		}
+
+		fmt.Printf("Cert: %s\n", cert_path)
+		fmt.Printf("Key: %s\n", key_path)
+	}
+
 	http.Handle("/camera", NoOrigHandler{cameraHandler})
 	http.Handle("/client", NoOrigHandler{clientHandler})
 
-	fmt.Println("Server start")
-	http.ListenAndServe(":8080", nil)
+	fmt.Printf("Server start on %d\n", port)
+	if is_ssl {
+		runHttps(port, cert_path, key_path)
+	} else {
+		runHttp(port)
+	}
 }
