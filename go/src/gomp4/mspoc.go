@@ -99,6 +99,7 @@ func process(writer *websocket.Conn, reader *websocket.Conn) error {
 
 	go write_frame(writer)
 
+	var last_duration int
 	for {
 		is_key_frame, duration, buf, err := read_buffer(reader)
 		if err != nil {
@@ -111,7 +112,9 @@ func process(writer *websocket.Conn, reader *websocket.Conn) error {
 
 		if duration == 0 {
 			fmt.Println("Frame with 0 duration is found. Drop it")
-			continue
+			duration = last_duration
+		} else {
+			last_duration = duration
 		}
 
 		// Do some prcocess
