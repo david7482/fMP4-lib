@@ -4,59 +4,72 @@
         <meta charset="utf-8"/>
     </head>
     <body>
-        <video controls></video>
+        <div id="media_source"></div>
+        <div id="ws"></div>
+        <div id="init_frag"></div>
+        <div id="first_frame"></div>
+        <div id="total"></div>
+        <br>
+        <div id="current"></div>
+        <div id="buffered"></div>
+        <div id="rate"></div>
+        <div id="frag_wait"></div>
+        <br>
+        <button id="live">LIVE</button>
+        <br>
+        <video width="1280" height="720" controls></video>
     <script>
 
     var video = document.querySelector('video');
 
-    var firstData = true;
+    var live = document.getElementById('live');
+    live.disabled = true;
+    live.onclick = function () {
+        if (video.currentTime != 0) {
+            video.currentTime = sourceBuffer.buffered.end(0);
+        }
+    };
+
+    var needData = true;
     var queue = [];
-    var head;
     var sourceBuffer = null;
-    var mimeCodec = 'video/mp4; codecs="avc1.420028"';
+    var mimeCodec = 'video/mp4; codecs="avc1.42e028"';
     var mediaSource = null;
 
-    var wsURL = 'ws://192.168.2.170:8080/client';
-    var wsProtocol = 'client';
-    if ("WebSocket" in window) {
+    var mediaSourceCreateStartTime = 0, mediaSourceCreateEndTime = 0;
+    var wsConnectStartTime = 0, wsConnectEndTime = 0;
+    var initFragmentStartTime = 0, initFragmentEndTime = 0;
+    var firstFrameShowStartTime = 0, firstFrameShowEndTime = 0;
 
-        var ws = new WebSocket(wsURL);
-        ws.binaryType = "arraybuffer";
+    var maxFragWaitTime = 0, totalFragWaitTime = 0, totalFragWaitTimeCount = 0;
+    var prevFragTimestamp = 0;
 
-        ws.onopen = function() {
-            console.log("WebSocket is connected.");
-            createMediaSource();
-        };
+    var totalStartTime = (new Date()).getTime();
+    var stopTimer = function () {
 
-        ws.onmessage = function (evt) {
-            if (evt.data instanceof ArrayBuffer) {
-                console.log("evt: ", evt.data);
-                if (firstData) {
-                    sourceBuffer.appendBuffer(new Uint8Array(evt.data));
-                    firstData = false;
-                } else {
-                    head = new Uint8Array(evt.data);
-//                    queue.push(new Uint8Array(evt.data));
-                }
-            }
-        };
+        firstFrameShowEndTime = (new Date()).getTime();
+        document.getElementById('first_frame').innerHTML = 'First frame decode/render Time: ' + (firstFrameShowEndTime - firstFrameShowStartTime) + ' ms';
 
-        ws.onclose = function(evt) {
-            console.log("WebSocket is closed: ", evt.reason, evt.code);
-        };
-        
-        ws.onerror = function (evt) {
-            console.log("WebSocket error: ", evt.data);
-        }
+        var sum = (mediaSourceCreateEndTime - mediaSourceCreateStartTime) +
+                  (wsConnectEndTime - wsConnectStartTime) +
+                  (initFragmentEndTime - initFragmentStartTime) +
+                  (firstFrameShowEndTime - firstFrameShowStartTime);
 
-    } else {
-        console.log("WebSocket is NOT supported");
-    }
+        document.getElementById('total').innerHTML = 'Total: ' + ((new Date()).getTime() - totalStartTime) + ' ms (' + sum + ')';
+
+        video.removeEventListener('playing', stopTimer);
+    };
+
+    var wsURL = 'wss://rocket.umbocv.com:8080/client';
+
+    createMediaSource();
 
     function createMediaSource() {
         if ('MediaSource' in window && MediaSource.isTypeSupported(mimeCodec)) {
             mediaSource = new MediaSource;
+            mediaSourceCreateStartTime = (new Date()).getTime();
             video.src = URL.createObjectURL(mediaSource);
+            video.addEventListener('playing', stopTimer);
             mediaSource.addEventListener('sourceopen', addSourceBuffer);
         } else {
             console.error('Unsupported MIME type or codec: ', mimeCodec);
@@ -67,28 +80,110 @@
 
     function addSourceBuffer (_) {
 
+        mediaSourceCreateEndTime = (new Date()).getTime();
+        document.getElementById('media_source').innerHTML = 'MediaSource Create Time: ' + (mediaSourceCreateEndTime - mediaSourceCreateStartTime) + ' ms';
+
         sourceBuffer = mediaSource.addSourceBuffer(mimeCodec);
+        //sourceBuffer.mode = 'sequence';
         sourceBuffer.addEventListener('update', function() {
-            //if (queue.length > 0) {
-            if (head) {
+            if (queue.length > 0) {
                 console.log("update");
-                //sourceBuffer.appendBuffer(queue.shift());
-                sourceBuffer.appendBuffer(head);
-                head = null;
+                sourceBuffer.appendBuffer(queue.shift());
             } else {
-                firstData = true;
+                needData = true;
             }
         });
 
         video.addEventListener('timeupdate', function () {
-            console.log('Current time: ', video.currentTime);
+            document.getElementById('current').innerHTML = '' + 'Current time: ' + video.currentTime + 'sec';
         });
         video.addEventListener('canplay', function () {
             console.log('Got can play event');
             video.play();
+            live.disabled = false;
         });
 
         console.log("Done with addSourceBuffer");
+
+        var ws = new WebSocket(wsURL);
+        ws.binaryType = "arraybuffer";
+        wsConnectStartTime = (new Date()).getTime();
+
+        ws.onopen = function() {
+            wsConnectEndTime = (new Date()).getTime();
+            initFragmentStartTime = (new Date()).getTime();
+            document.getElementById('ws').innerHTML = 'WS Connect Time: ' + (wsConnectEndTime - wsConnectStartTime) + ' ms';
+        };
+
+        ws.onmessage = function (evt) {
+            if (initFragmentEndTime === 0) {
+                initFragmentEndTime = (new Date()).getTime();
+                firstFrameShowStartTime = (new Date()).getTime();
+                document.getElementById('init_frag').innerHTML = 'Wait Init Fragment Time: ' + (initFragmentEndTime - initFragmentStartTime) + ' ms';
+            }
+
+            if (prevFragTimestamp != 0) {
+                var instantFragWait = (new Date()).getTime() - prevFragTimestamp;
+                if (instantFragWait > maxFragWaitTime) maxFragWaitTime = instantFragWait;
+                totalFragWaitTime += instantFragWait;
+                var avg = Math.round(totalFragWaitTime / totalFragWaitTimeCount);
+
+                document.getElementById('frag_wait').innerHTML =
+                        'Instantaneous Fragment Wait: ' + instantFragWait + ' ms (max: ' + maxFragWaitTime + '), ' +
+                        'Avg Fragment Wait: ' + avg + 'ms';
+            }
+
+            if (evt.data instanceof ArrayBuffer) {
+                console.log("evt: ", evt.data.byteLength);
+                if (needData) {
+                    sourceBuffer.appendBuffer(new Uint8Array(evt.data));
+                    needData = false;
+                } else {
+                    if (queue.length > 0) {
+                        console.log("Got other chunks in queue");
+                    }
+                    queue.push(new Uint8Array(evt.data));
+                }
+            }
+
+            var bufferedRange = sourceBuffer.buffered;
+            document.getElementById('buffered').innerHTML = '';
+            for (var i = 0; i < bufferedRange.length; i++) {
+                document.getElementById('buffered').innerHTML += '' + 'Buffer(' + i +'): ' + bufferedRange.start(i) + ' - ' + bufferedRange.end(i) + ', buffer lead time: ' + (bufferedRange.end(i) - video.currentTime).toFixed(2) + 'sec';
+            }
+
+            if (video.currentTime != 0 && !video.paused) {
+                var buffered_time = (bufferedRange.end(0) - video.currentTime);
+                if (buffered_time < 1) {
+                    console.log("Not enough buffered time. Make it pause 500 ms then auto replay");
+                    setTimeout(function () {
+                        video.play();
+                    }, 500);
+                    video.pause();
+                } else if (buffered_time > 2) {
+                    //console.log("Too much buffered time which cause latency. Just jump to live");
+                    //video.currentTime = sourceBuffer.buffered.end(0) - 1;
+                } else if (buffered_time > 1.5) {
+                    //console.log("Too much buffered time which cause latency. Speed up the playback rate");
+                    //video.playbackRate = 1.2
+                } else if (video.playbackRate !== 1) {
+                    //video.playbackRate = 1
+                }
+
+                document.getElementById('rate').innerHTML = 'Playback Rate: ' + video.playbackRate;
+            }
+
+            prevFragTimestamp = (new Date()).getTime();
+            totalFragWaitTimeCount += 1;
+        };
+
+        ws.onclose = function(evt) {
+            console.log("WebSocket is closed: ", evt.reason, evt.code);
+        };
+
+        ws.onerror = function (evt) {
+            console.log("WebSocket error: ", evt.data);
+        }
     }
 
 </script>
